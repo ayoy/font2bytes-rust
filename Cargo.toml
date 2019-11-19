@@ -1,0 +1,10 @@
+[package]
+name = "font2bytes"
+version = "0.1.0"
+authors = ["Dominik Kapusta <dominik@kapusta.cc>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+png = "0.11.0"
