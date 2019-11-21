@@ -3,6 +3,7 @@ extern crate strum;
 
 use structopt::StructOpt;
 pub mod config;
+pub mod image;
 
 fn main() {
     let config = config::Config::from_args();
@@ -13,5 +14,5 @@ fn main() {
     };
     println!("{:?}", config);
     println!("{:?}", source_code_options);
-    println!("{:?}", config.input_file_path);
+    let image = image::read_png_image(&config.input_file_path);
 }
