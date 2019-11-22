@@ -23,31 +23,112 @@ impl InputImage for InputPNGImage {
 	}
 
 	fn is_pixel_set(&self, x: u32, y: u32) -> bool {
-		if x > self.width || y > self.height {
+		if x >= self.width || y >= self.height {
 			return false;
 		}
 		let width_offset = if self.width % 8 == 0 { self.width / 8 } else { self.width / 8 + 1 };
 		let offset = y * width_offset + x/8;
 
 		let mask = 1 << x%8;
+        if self.image_data.len() <= offset as usize {
+            println!("x: {}, y: {}, offset: {}, len: {}, width: {}, height: {}", x, y, offset, self.image_data.len(), self.width, self.height);
+        }
 		return self.image_data[offset as usize] & mask == mask;
 	}
 }
 
-pub fn read_png_image(file_path: &PathBuf) -> InputPNGImage {
-	let decoder = png::Decoder::new(File::open(file_path).unwrap());
-	let (info, mut reader) = decoder.read_info().unwrap();
+impl InputPNGImage {
+    pub fn new(file_path: &PathBuf) -> InputPNGImage {
+        let decoder = png::Decoder::new(File::open(file_path).unwrap());
+        let (info, mut reader) = decoder.read_info().unwrap();
 
-	let read_row = || reader.next_row().unwrap().unwrap().to_vec();
+        let read_row = || reader.next_row().unwrap().unwrap().to_vec();
 
-	InputPNGImage { 
-		width: info.width,
-		height: info.height,
-		image_data: read_png_image_data(info.height, read_row)
-	}
+        InputPNGImage { 
+            width: info.width,
+            height: info.height,
+            image_data: read_png_image_data(info.height, info.color_type, read_row)
+        }
+    }
 }
 
-fn read_png_image_data(num_rows: u32, mut read_row: impl FnMut() -> Vec<u8>) -> Vec<u8> {
+#[derive(Debug)]
+enum Pixel {
+    RGBA(u8, u8, u8, u8),
+    Grayscale(u8, u8)
+}
+
+impl Pixel {
+    const IS_SET_THRESHOLD: u8 = 0x32;
+
+    fn from_vec(vec: &[u8]) -> Option<Pixel> {
+        match vec.len() {
+            1 => Some(Pixel::Grayscale(vec[0], 0xFF)),
+            2 => Some(Pixel::Grayscale(vec[0], vec[1])),
+            3 => Some(Pixel::RGBA(vec[0], vec[1], vec[2], 0xFF)),
+            4 => Some(Pixel::RGBA(vec[0], vec[1], vec[2], vec[3])),
+            _ => None
+        }
+    }
+
+    fn is_set(&self) -> bool {
+        match self {
+            Pixel::Grayscale(gray, alpha) => *alpha == 0xFF && *gray > Pixel::IS_SET_THRESHOLD,
+            Pixel::RGBA(r, g, b, alpha) => *alpha == 0xFF && 
+                (
+                    *r < Pixel::IS_SET_THRESHOLD || 
+                    *g < Pixel::IS_SET_THRESHOLD || 
+                    *b < Pixel::IS_SET_THRESHOLD
+                )
+        }
+    }
+}
+
+
+#[derive(Debug)]
+struct ImageRowIterator<'a> {
+    row: &'a [u8], 
+    step: usize,
+    index: usize
+}
+
+impl<'a> ImageRowIterator<'a> {
+    fn new(row: &'a [u8], color_type: png::ColorType) -> Option<ImageRowIterator> {
+        let step = match color_type {
+            png::ColorType::Grayscale => 1,
+            png::ColorType::GrayscaleAlpha => 2,
+            png::ColorType::RGB => 3,
+            png::ColorType::RGBA => 4,
+            _ => 0
+        };
+
+        if step == 0 {
+            return None;
+        }
+
+        Some(ImageRowIterator {row: row, step: step, index: 0 })
+    }
+}
+
+impl<'a> Iterator for ImageRowIterator<'a> {
+    type Item = Pixel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let end_index = std::cmp::min(self.index + self.step - 1, self.row.len() - 1);
+
+        let values = &self.row[self.index..=end_index];
+        self.index = end_index+1;
+
+        if values.len() == self.step {
+            Self::Item::from_vec(values)
+        } else {
+            None
+        }        
+    }
+}
+
+
+fn read_png_image_data(num_rows: u32, color_type: png::ColorType, mut read_row: impl FnMut() -> Vec<u8>) -> Vec<u8> {
 	let mut data: Vec<u8> = Vec::new();
 
 	let mut line = 0;
@@ -55,31 +136,29 @@ fn read_png_image_data(num_rows: u32, mut read_row: impl FnMut() -> Vec<u8>) -> 
 	while line < num_rows {
 		let row = read_row();
 
-		let (mut index, mut mask, mut current_byte) = (0, 1u8, 0u8);
-		while index < row.len() {
-			let (r, g, b, a) = (row[index], row[index+1], row[index+2], row[index+3]);
-			let is_set = (a == 0xFF) && (r < 0x32 || g < 0x32 || b < 0x32);
+        let mut image_row = ImageRowIterator::new(&row, color_type).unwrap();
 
-			if is_set {
-				current_byte |= mask;
-			}
-			index += 4;
+        let (mut mask, mut current_byte) = (1u8, 0u8);
+        while let Some(pixel) = image_row.next() {
 
-			if mask == 0b10000000 {
-				data.push(current_byte);
-				current_byte = 0;
-				mask = 1;
-			} else {
-				mask <<= 1;
-			}
-		}
+            if pixel.is_set() {
+                current_byte |= mask;
+            }
+
+            if mask == 0b10000000 {
+                data.push(current_byte);
+                current_byte = 0;
+                mask = 1;
+            } else {
+                mask <<= 1;
+            }
+        }
 
 		line += 1;
 	}
 
 	data
 }
-
 
 #[cfg(test)]
 mod tests {

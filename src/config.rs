@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(StructOpt, EnumString, EnumVariantNames, Debug)]
 #[strum(serialize_all = "kebab-case")]
-pub enum Generator {
+pub enum Format {
 	C,
 	Arduino,
 	PythonList,
@@ -22,23 +22,28 @@ pub struct SourceCodeOptions {
 	pub invert_bits: bool
 }
 
+pub struct FontMetrics {
+	pub height: u8,
+	pub width: u8
+}
+
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Converts font bitmap to array of bytes for use in embedded systems.")]
 pub struct Config {
 	/// Font height in pixels
 	#[structopt(short = "h", long = "height")]
-	pub font_height: u8,
+	font_height: u8,
 
 	/// Font width in pixels
 	#[structopt(short = "w", long = "width")]
-	pub font_width: u8,
+	font_width: u8,
 
 	/// Output source code format
 	///
 	/// Available output formats: c, arduino, python-list, python-bytes
 	#[structopt(short, long, default_value = "c")]
-	pub format: Generator,
+	pub format: Format,
 
 	/// Path to the output file (stdout if not present)
 	#[structopt(short = "o", long = "output")]
@@ -55,4 +60,10 @@ pub struct Config {
 	/// Invert bits in output
 	#[structopt(short, long)]
 	pub invert_bits: bool
+}
+
+impl Config {
+	pub fn font_metrics(&self) -> FontMetrics {
+		FontMetrics { height: self.font_height, width: self.font_width }
+	}
 }
