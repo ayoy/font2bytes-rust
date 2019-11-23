@@ -17,19 +17,18 @@ impl FixedWidthFontConverter {
 
 	pub fn convert<T: InputImage>(&self, image: T) -> String {
 
-	    let generator = CCodeGenerator {};
 	    let timestamp = Local::now().format("%d/%m/%Y at %H:%M:%S");
 
 	    let mut source_code = String::new();
 
-	    source_code.push_str(&generator.begin(&timestamp.to_string()));
-	    source_code.push_str(&generator.begin_array("font"));
+	    source_code.push_str(&self.format.begin(&timestamp.to_string()));
+	    source_code.push_str(&self.format.begin_array("font"));
 
 	    let mut character_count = 0;
 	    for y in 0..image.height()/(self.font_metrics.height as u32) {
 
 		    for x in 0..image.width()/(self.font_metrics.width as u32) {
-		    	source_code.push_str(&generator.begin_array_row());
+		    	source_code.push_str(&self.format.begin_array_row());
 
 		    	for row in 0..self.font_metrics.height {
 		    		let mut remaining_bits: u8 = self.font_metrics.width;
@@ -52,17 +51,17 @@ impl FixedWidthFontConverter {
     	                    mask >>= 1;
 	                        remaining_bits -= 1;
                 		}
-	                    source_code.push_str(&generator.byte(byte));
+	                    source_code.push_str(&self.format.byte(byte));
     	                byte_index += 1;
                 	}
 		    	}
-		    	source_code.push_str(&generator.comment(&format!("Character 0x{0:02X} ({0})", character_count)));
-		    	source_code.push_str(&generator.line_break());
+		    	source_code.push_str(&self.format.comment(&format!("Character 0x{0:02X} ({0})", character_count)));
+		    	source_code.push_str(&self.format.line_break());
 		    	character_count += 1;
 		    }
 	    }
-	    source_code.push_str(&generator.end_array());
-	    source_code.push_str(&generator.end());
+	    source_code.push_str(&self.format.end_array());
+	    source_code.push_str(&self.format.end());
 	    return source_code;
 	}
 }

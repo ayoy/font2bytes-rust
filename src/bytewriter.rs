@@ -1,3 +1,4 @@
+use crate::config::Format;
 
 pub trait ByteWriter {
 	fn begin(&self, timestamp: &String) -> String;
@@ -10,28 +11,45 @@ pub trait ByteWriter {
 	fn end(&self) -> String;
 }
 
-pub struct CCodeGenerator {}
-pub struct ArduinoCodeGenerator {}
-
-impl ByteWriter for CCodeGenerator {
+impl ByteWriter for Format {
 	fn begin(&self, timestamp: &String) -> String {
-		format!("//\n// Font Data\n// Created: {}\n//\n", timestamp)
+		match self {
+			Format::C => format!("//\n// Font Data\n// Created: {}\n//\n", timestamp),
+			Format::Arduino => format!("//\n// Font Data\n// Created: {}\n//\n\n#include <Arduino.h>\n", timestamp),
+			Format::PythonList | Format::PythonBytes => format!("#\n# Font Data\n# Created: {}\n#\n", timestamp)
+		}
 	}
 
 	fn begin_array(&self, name: &str) -> String {
-		format!("\n\nconst unsigned char {}[] = {{\n", name)
+		match self {
+			Format::C => format!("\n\nconst unsigned char {}[] = {{\n", name),
+			Format::Arduino => format!("\n\nconst uint8_t {}[] PROGMEM = {{\n", name),
+			Format::PythonList => format!("\n\n{} = [\n", name),
+			Format::PythonBytes => format!("\n\n{} = b'' \\\n", name)
+		}		
 	}
 
 	fn begin_array_row(&self) -> String {
-		String::from("\t")
+		match self {
+			Format::PythonBytes => String::from("\t'"),
+			_ => String::from("\t")
+		}
 	}
 
 	fn byte(&self, byte: u8) -> String {
-		format!("0x{:02X},", byte)
+		match self {
+			Format::C | Format::Arduino => format!("0x{:02X},", byte),
+			Format::PythonList => format!("0x{:02x},", byte),
+			Format::PythonBytes => format!("\\x{:02x}", byte)
+		}
 	}
 
 	fn comment(&self, comment: &String) -> String {
-		format!(" // {}", comment)
+		match self {
+			Format::C | Format::Arduino => format!(" // {}", comment),
+			Format::PythonList => format!(" # {}", comment),
+			Format::PythonBytes => String::from("' \\")
+		}
 	}
 
 	fn line_break(&self) -> String {
@@ -39,41 +57,11 @@ impl ByteWriter for CCodeGenerator {
 	}
 
 	fn end_array(&self) -> String {
-		String::from("};\n")
-	}
-
-	fn end(&self) -> String {
-		String::from("\n\n")
-	}
-}
-
-impl ByteWriter for ArduinoCodeGenerator {
-	fn begin(&self, timestamp: &String) -> String {
-		format!("//\n// Font Data\n// Created: {}\n//\n\n#include <Arduino.h>\n", timestamp)
-	}
-
-	fn begin_array(&self, name: &str) -> String {
-		format!("\n\nconst uint8_t {}[] PROGMEM = {{\n", name)
-	}
-
-	fn begin_array_row(&self) -> String {
-		String::from("\t")
-	}
-
-	fn byte(&self, byte: u8) -> String {
-		format!("0x{:02X},", byte)
-	}
-
-	fn comment(&self, comment: &String) -> String {
-		format!(" // {}", comment)
-	}
-
-	fn line_break(&self) -> String {
-		String::from("\n")
-	}
-
-	fn end_array(&self) -> String {
-		String::from("};\n")
+		match self {
+			Format::C | Format::Arduino => String::from("};\n"),
+			Format::PythonList => String::from("]\n"),
+			Format::PythonBytes => String::from("")
+		}
 	}
 
 	fn end(&self) -> String {

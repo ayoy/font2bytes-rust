@@ -1,5 +1,41 @@
 use std::path::PathBuf;
 use std::fs::File;
+use std::io;
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum ImageLoadingError {
+    IOError(io::Error),
+    DecodingError(png::DecodingError)
+}
+
+impl Error for ImageLoadingError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ImageLoadingError::IOError(e) => Some(e),
+            ImageLoadingError::DecodingError(e) => Some(e)
+        }
+    }
+}
+
+impl fmt::Display for ImageLoadingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.source().unwrap().to_string())
+    }
+}
+
+impl From<io::Error> for ImageLoadingError {
+    fn from(e: io::Error) -> ImageLoadingError {
+        ImageLoadingError::IOError(e)
+    }
+}
+
+impl From<png::DecodingError> for ImageLoadingError {
+    fn from(e: png::DecodingError) -> ImageLoadingError {
+        ImageLoadingError::DecodingError(e)
+    }    
+}
 
 pub trait InputImage {
 	fn width(&self) -> u32;
@@ -38,17 +74,71 @@ impl InputImage for InputPNGImage {
 }
 
 impl InputPNGImage {
-    pub fn new(file_path: &PathBuf) -> InputPNGImage {
-        let decoder = png::Decoder::new(File::open(file_path).unwrap());
-        let (info, mut reader) = decoder.read_info().unwrap();
+    pub fn new<'a>(file_path: PathBuf) -> Result<InputPNGImage, ImageLoadingError> {
+        let decoder = png::Decoder::new(File::open(file_path)?);
+        let (info, mut reader) = decoder.read_info()?;
 
-        let read_row = || reader.next_row().unwrap().unwrap().to_vec();
+        let read_row = || -> Result<Option<Vec<u8>>, png::DecodingError> {
+            reader.next_row().map( |optional_data| optional_data.map(|r| r.to_vec()) )
+        };
 
-        InputPNGImage { 
+        let image_data = read_png_image_data(info.color_type, read_row)?;
+
+        Ok(InputPNGImage {
             width: info.width,
             height: info.height,
-            image_data: read_png_image_data(info.height, info.color_type, read_row)
+            image_data: image_data
+        })
+    }
+}
+
+fn read_png_image_data(color_type: png::ColorType, 
+    mut read_next_row: impl FnMut() -> Result<Option<Vec<u8>>, png::DecodingError>) 
+    -> Result<Vec<u8>, png::DecodingError>
+{
+    let mut data: Vec<u8> = Vec::new();
+
+    let mut error: Option<png::DecodingError> = None;
+
+    loop {
+        let result = read_next_row();
+        if result.is_err() {
+            error = result.err();
+            // break with a PNG decoding error
+            break;
         }
+
+        let optional_data = result.ok().unwrap();
+
+        if optional_data == None {
+            // break due to EOF
+            break;
+        }
+
+        let row = optional_data.unwrap();
+
+        let mut image_row = ImageRowIterator::new(&row, color_type).unwrap();
+
+        let (mut mask, mut current_byte) = (1u8, 0u8);
+        while let Some(pixel) = image_row.next() {
+
+            if pixel.is_set() {
+                current_byte |= mask;
+            }
+
+            if mask == 0b10000000 {
+                data.push(current_byte);
+                current_byte = 0;
+                mask = 1;
+            } else {
+                mask <<= 1;
+            }
+        }
+    }
+
+    match error {
+        Some(err) => Err(err),
+        None => Ok(data)
     }
 }
 
@@ -73,7 +163,7 @@ impl Pixel {
 
     fn is_set(&self) -> bool {
         match self {
-            Pixel::Grayscale(gray, alpha) => *alpha == 0xFF && *gray > Pixel::IS_SET_THRESHOLD,
+            Pixel::Grayscale(gray, alpha) => *alpha == 0xFF && *gray < Pixel::IS_SET_THRESHOLD,
             Pixel::RGBA(r, g, b, alpha) => *alpha == 0xFF && 
                 (
                     *r < Pixel::IS_SET_THRESHOLD || 
@@ -128,38 +218,6 @@ impl<'a> Iterator for ImageRowIterator<'a> {
 }
 
 
-fn read_png_image_data(num_rows: u32, color_type: png::ColorType, mut read_row: impl FnMut() -> Vec<u8>) -> Vec<u8> {
-	let mut data: Vec<u8> = Vec::new();
-
-	let mut line = 0;
-
-	while line < num_rows {
-		let row = read_row();
-
-        let mut image_row = ImageRowIterator::new(&row, color_type).unwrap();
-
-        let (mut mask, mut current_byte) = (1u8, 0u8);
-        while let Some(pixel) = image_row.next() {
-
-            if pixel.is_set() {
-                current_byte |= mask;
-            }
-
-            if mask == 0b10000000 {
-                data.push(current_byte);
-                current_byte = 0;
-                mask = 1;
-            } else {
-                mask <<= 1;
-            }
-        }
-
-		line += 1;
-	}
-
-	data
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -195,8 +253,14 @@ mod tests {
     fn read_png_image() {
         use crate::image::read_png_image_data;
 
+        let mut num = 1;
+
         let read_row = || {
-            [
+            num -= 1;
+            if num < 0 {
+                return Ok(None);
+            }
+            Ok(Some([
                 191, 191, 191, 191, 
                 191, 191, 191, 191,
                 0, 0, 0, 255,
@@ -277,10 +341,10 @@ mod tests {
                 0, 0, 0, 255, 
                 191, 191, 191, 191,
                 0, 0, 0, 255,
-            ].to_vec()
+            ].to_vec()))
         };
         
-        let data = read_png_image_data(1, read_row);
+        let data = read_png_image_data(png::ColorType::RGBA, read_row).unwrap();
 
         assert_eq!(data, [
                 0b11001100, 
