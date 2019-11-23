@@ -1,7 +1,7 @@
 use structopt::StructOpt;
 use std::path::PathBuf;
 
-#[derive(StructOpt, EnumString, EnumVariantNames, Debug)]
+#[derive(StructOpt, EnumString, EnumVariantNames, Debug, Clone, Copy)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Format {
 	C,
@@ -10,7 +10,7 @@ pub enum Format {
 	PythonBytes
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum BitNumbering {
 	MSB,
 	LSB
@@ -65,5 +65,16 @@ pub struct Config {
 impl Config {
 	pub fn font_metrics(&self) -> FontMetrics {
 		FontMetrics { height: self.font_height, width: self.font_width }
+	}
+
+	pub fn source_code_options(&self) -> SourceCodeOptions {
+		SourceCodeOptions { 
+    		bit_numbering: self.bit_numbering(),
+    		invert_bits: self.invert_bits
+    	}
+	}
+
+	fn bit_numbering(&self) -> BitNumbering {
+		return if self.msb { BitNumbering::MSB } else { BitNumbering::LSB };
 	}
 }
