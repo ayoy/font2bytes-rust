@@ -80,7 +80,7 @@ impl InputImage for InputPNGImage {
 }
 
 impl InputPNGImage {
-    pub fn new<'a>(file_path: PathBuf) -> Result<InputPNGImage, ImageLoadingError> {
+    pub fn new<'a>(file_path: &'a PathBuf) -> Result<InputPNGImage, ImageLoadingError> {
         let decoder = png::Decoder::new(File::open(file_path)?);
         let (info, mut reader) = decoder.read_info()?;
 

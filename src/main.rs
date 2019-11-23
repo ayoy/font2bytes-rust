@@ -11,12 +11,12 @@ use image::*;
 use convert::FixedWidthFontConverter;
 use std::io::LineWriter;
 
-fn main() {
+fn main() -> Result<(), ImageLoadingError> {
     let config = config::Config::from_args();
 
     let line_writer = LineWriter::new(config.output_stream());
 
-    let result = InputPNGImage::new(config.input_file_path.clone())
+    InputPNGImage::new(&config.input_file_path)
         .and_then( |image| -> Result<(), ImageLoadingError> {
             let converter = FixedWidthFontConverter{
                 font_metrics: config.font_metrics(),
@@ -24,9 +24,5 @@ fn main() {
                 source_code_options: config.source_code_options(),
             };
             converter.convert(image, line_writer)
-        });
-
-    if let Err(error) = result {
-        println!("Error processing image file: {}", error);
-    }
+        })
 }

@@ -77,7 +77,7 @@ impl Config {
     }
 
     pub fn output_stream(&self) -> Box<dyn Write> {
-        match self.output_file_path.clone() {
+        match &self.output_file_path {
             None => Box::new(std::io::stdout()) as Box<dyn Write>,
             Some(path) => Box::new(File::create(path).unwrap()) as Box<dyn Write>
         }
