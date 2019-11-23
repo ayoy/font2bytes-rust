@@ -7,21 +7,27 @@ use std::fmt;
 #[derive(Debug)]
 pub enum ImageLoadingError {
     IOError(io::Error),
-    DecodingError(png::DecodingError)
+    DecodingError(png::DecodingError),
+    UnsupportedColorType(png::ColorType)
 }
 
 impl Error for ImageLoadingError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             ImageLoadingError::IOError(e) => Some(e),
-            ImageLoadingError::DecodingError(e) => Some(e)
+            ImageLoadingError::DecodingError(e) => Some(e),
+            _ => None
         }
     }
 }
 
 impl fmt::Display for ImageLoadingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.source().unwrap().to_string())
+        let reason = match self {
+            ImageLoadingError::UnsupportedColorType(color_type) => format!("Unsupported image format: {:?}", color_type),
+            _ => self.source().unwrap().to_string()
+        };
+        write!(f, "{}", reason)
     }
 }
 
@@ -94,30 +100,20 @@ impl InputPNGImage {
 
 fn read_png_image_data(color_type: png::ColorType, 
     mut read_next_row: impl FnMut() -> Result<Option<Vec<u8>>, png::DecodingError>) 
-    -> Result<Vec<u8>, png::DecodingError>
+    -> Result<Vec<u8>, ImageLoadingError>
 {
     let mut data: Vec<u8> = Vec::new();
 
-    let mut error: Option<png::DecodingError> = None;
-
     loop {
-        let result = read_next_row();
-        if result.is_err() {
-            error = result.err();
-            // break with a PNG decoding error
-            break;
-        }
+        let result = read_next_row()?;
 
-        let optional_data = result.ok().unwrap();
-
-        if optional_data == None {
+        if result == None {
             // break due to EOF
             break;
         }
 
-        let row = optional_data.unwrap();
-
-        let mut image_row = ImageRowIterator::new(&row, color_type).unwrap();
+        let row = result.unwrap();
+        let mut image_row = ImageRowIterator::new(&row, color_type)?;
 
         let (mut mask, mut current_byte) = (1u8, 0u8);
         while let Some(pixel) = image_row.next() {
@@ -136,10 +132,7 @@ fn read_png_image_data(color_type: png::ColorType,
         }
     }
 
-    match error {
-        Some(err) => Err(err),
-        None => Ok(data)
-    }
+    Ok(data)
 }
 
 #[derive(Debug)]
@@ -183,7 +176,7 @@ struct ImageRowIterator<'a> {
 }
 
 impl<'a> ImageRowIterator<'a> {
-    fn new(row: &'a [u8], color_type: png::ColorType) -> Option<ImageRowIterator> {
+    fn new(row: &'a [u8], color_type: png::ColorType) -> Result<ImageRowIterator, ImageLoadingError> {
         let step = match color_type {
             png::ColorType::Grayscale => 1,
             png::ColorType::GrayscaleAlpha => 2,
@@ -193,10 +186,10 @@ impl<'a> ImageRowIterator<'a> {
         };
 
         if step == 0 {
-            return None;
+            return Err(ImageLoadingError::UnsupportedColorType(color_type));
         }
 
-        Some(ImageRowIterator {row: row, step: step, index: 0 })
+        Ok(ImageRowIterator {row: row, step: step, index: 0})
     }
 }
 

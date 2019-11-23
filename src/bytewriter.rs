@@ -14,9 +14,14 @@ pub trait ByteWriter {
 impl ByteWriter for Format {
 	fn begin(&self, timestamp: &String) -> String {
 		match self {
-			Format::C => format!("//\n// Font Data\n// Created: {}\n//\n", timestamp),
-			Format::Arduino => format!("//\n// Font Data\n// Created: {}\n//\n\n#include <Arduino.h>\n", timestamp),
-			Format::PythonList | Format::PythonBytes => format!("#\n# Font Data\n# Created: {}\n#\n", timestamp)
+			Format::C => 
+				format!("//\n// Font Data\n// Created: {}\n//\n", timestamp),
+
+			Format::Arduino => 
+				format!("//\n// Font Data\n// Created: {}\n//\n\n#include <Arduino.h>\n", timestamp),
+
+			Format::PythonList | Format::PythonBytes => 
+				format!("#\n# Font Data\n# Created: {}\n#\n", timestamp)
 		}
 	}
 
