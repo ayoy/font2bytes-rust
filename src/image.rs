@@ -44,39 +44,39 @@ impl From<png::DecodingError> for ImageLoadingError {
 }
 
 pub trait InputImage {
-	fn width(&self) -> u32;
-	fn height(&self) -> u32;
-	fn is_pixel_set(&self, x: u32, y: u32) -> bool;
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+    fn is_pixel_set(&self, x: u32, y: u32) -> bool;
 }
 
 pub struct InputPNGImage {
-	pub width: u32,
-	pub height: u32,
-	image_data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    image_data: Vec<u8>,
 }
 
 impl InputImage for InputPNGImage {
-	fn width(&self) -> u32 { 
-		return self.width; 
-	}
+    fn width(&self) -> u32 { 
+        return self.width; 
+    }
 
-	fn height(&self) -> u32 { 
-		return self.height; 
-	}
+    fn height(&self) -> u32 { 
+        return self.height; 
+    }
 
-	fn is_pixel_set(&self, x: u32, y: u32) -> bool {
-		if x >= self.width || y >= self.height {
-			return false;
-		}
-		let width_offset = if self.width % 8 == 0 { self.width / 8 } else { self.width / 8 + 1 };
-		let offset = y * width_offset + x/8;
+    fn is_pixel_set(&self, x: u32, y: u32) -> bool {
+        if x >= self.width || y >= self.height {
+            return false;
+        }
+        let width_offset = if self.width % 8 == 0 { self.width / 8 } else { self.width / 8 + 1 };
+        let offset = y * width_offset + x/8;
 
-		let mask = 1 << x%8;
+        let mask = 1 << x%8;
         if self.image_data.len() <= offset as usize {
             println!("x: {}, y: {}, offset: {}, len: {}, width: {}, height: {}", x, y, offset, self.image_data.len(), self.width, self.height);
         }
-		return self.image_data[offset as usize] & mask == mask;
-	}
+        return self.image_data[offset as usize] & mask == mask;
+    }
 }
 
 impl InputPNGImage {
@@ -216,12 +216,12 @@ mod tests {
 
     #[test]
     fn is_pixel_set() {
-    	use crate::image::InputImage;
-    	use crate::image::InputPNGImage;
-    	let image = InputPNGImage {
-    		width: 12,
-    		height: 4,
-    		image_data: vec![
+        use crate::image::InputImage;
+        use crate::image::InputPNGImage;
+        let image = InputPNGImage {
+            width: 12,
+            height: 4,
+            image_data: vec![
                 0b01101101, 0b00000110,
                 0b00111001, 0b00001111,
                 0b01111101, 0b00001010,
