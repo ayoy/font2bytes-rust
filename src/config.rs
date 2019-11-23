@@ -1,5 +1,7 @@
 use structopt::StructOpt;
 use std::path::PathBuf;
+use std::io::Write;
+use std::fs::File;
 
 #[derive(StructOpt, EnumString, EnumVariantNames, Debug, Clone, Copy)]
 #[strum(serialize_all = "kebab-case")]
@@ -73,6 +75,14 @@ impl Config {
             invert_bits: self.invert_bits
         }
     }
+
+    pub fn output_stream(&self) -> Box<dyn Write> {
+        match self.output_file_path.clone() {
+            None => Box::new(std::io::stdout()) as Box<dyn Write>,
+            Some(path) => Box::new(File::create(path).unwrap()) as Box<dyn Write>
+        }
+    }
+
 
     fn bit_numbering(&self) -> BitNumbering {
         return if self.msb { BitNumbering::MSB } else { BitNumbering::LSB };

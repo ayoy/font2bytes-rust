@@ -1,31 +1,31 @@
 use crate::config::FontMetrics;
 use crate::config::{Format, SourceCodeOptions, BitNumbering};
-use crate::image::InputImage;
+use crate::image::{InputImage, ImageLoadingError};
 use chrono::prelude::Local;
 use crate::bytewriter::*;
 use std::cmp::min;
+use std::io::LineWriter;
+use std::io::Write;
 
 pub struct FixedWidthFontConverter {
     pub font_metrics: FontMetrics,
     pub output_format: Format,
-    pub source_code_options: SourceCodeOptions
+    pub source_code_options: SourceCodeOptions,
 }
 
 impl FixedWidthFontConverter {
-    pub fn convert<T: InputImage>(&self, image: T) -> String {
+    pub fn convert<T: InputImage>(&self, image: T, mut buffer: LineWriter<Box<dyn Write>>) -> Result<(), ImageLoadingError> {
 
         let timestamp = Local::now().format("%d/%m/%Y at %H:%M:%S");
 
-        let mut source_code = String::new();
-
-        source_code.push_str(&self.output_format.begin(&timestamp.to_string()));
-        source_code.push_str(&self.output_format.begin_array("font"));
+        buffer.write_all(&self.output_format.begin(&timestamp.to_string()).as_bytes())?;
+        buffer.write_all(&self.output_format.begin_array("font").as_bytes())?;
 
         let mut character_count = 0;
         for y in 0..image.height()/(self.font_metrics.height as u32) {
 
             for x in 0..image.width()/(self.font_metrics.width as u32) {
-                source_code.push_str(&self.output_format.begin_array_row());
+                buffer.write_all(&self.output_format.begin_array_row().as_bytes())?;
 
                 for row in 0..self.font_metrics.height {
                     let mut remaining_bits: u8 = self.font_metrics.width;
@@ -48,18 +48,19 @@ impl FixedWidthFontConverter {
                             mask >>= 1;
                             remaining_bits -= 1;
                         }
-                        source_code.push_str(&self.output_format.byte(self.format_byte(byte)));
+                        buffer.write_all(&self.output_format.byte(self.format_byte(byte)).as_bytes())?;
                         byte_index += 1;
                     }
                 }
-                source_code.push_str(&self.output_format.comment(&format!("Character 0x{0:02X} ({0})", character_count)));
-                source_code.push_str(&self.output_format.line_break());
+                buffer.write_all(&self.output_format.comment(&format!("Character 0x{0:02X} ({0})", character_count)).as_bytes())?;
+                buffer.write_all(&self.output_format.line_break().as_bytes())?;
                 character_count += 1;
             }
         }
-        source_code.push_str(&self.output_format.end_array());
-        source_code.push_str(&self.output_format.end());
-        return source_code;
+        buffer.write_all(&self.output_format.end_array().as_bytes())?;
+        buffer.write_all(&self.output_format.end().as_bytes())?;
+
+        Ok(())
     }
 
     fn format_byte(&self, byte: u8) -> u8 {
