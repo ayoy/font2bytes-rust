@@ -1,5 +1,6 @@
 font2bytes
 ========================
+![](https://github.com/ayoy/font2bytes-rust/workflows/Rust/badge.svg)
 
 This is a rewrite of the [font2bytes](https://github.com/ayoy/font2bytes) C++ app in Rust, made purely for learning purposes.
 This command-line utility allows for converting a PNG image with a font sample to an array of bytes representing that font, for use in embedded systems' displays.
